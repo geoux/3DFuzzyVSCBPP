@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="BiCIAM-MultiObj">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/BiCIAM-MultiObj.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/commons-lang3-3.5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/poi-3.8-20120326.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
