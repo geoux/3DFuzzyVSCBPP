@@ -25,7 +25,7 @@ public class Main{
      */
     public static void main(String[] args) {
         ArrayList<String> instanceAddress = new ArrayList<>();
-        try (Stream<Path> paths = Files.walk(Paths.get("instances/Grupo1"))) {
+        try (Stream<Path> paths = Files.walk(Paths.get("instances"))) {
             paths
                     .filter(Files::isRegularFile)
                     .forEach(path -> instanceAddress.add(path.toString()));

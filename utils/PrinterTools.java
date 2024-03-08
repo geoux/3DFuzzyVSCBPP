@@ -11,6 +11,7 @@ import problem.definition.State;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class PrinterTools {
@@ -60,8 +61,24 @@ public class PrinterTools {
         saveResultToExcel(title,params,results,21, problemInstance);
     }
 
-    public static void saveStates(List<State> states, String fileName, ProblemInstance problemInstance){
+    public static void saveStates(List<State> states, String fileName, ProblemInstance problemInstance, AlgParams params){
         try{
+
+            states.sort(Comparator.comparing((State s) -> s.getEvaluation().get(0))
+                    .thenComparing((State s) -> s.getEvaluation().get(1))
+                    .thenComparing((State s) -> s.getEvaluation().get(2)));
+
+            ArrayList<State> bestSelected = new ArrayList<>();
+            int i = 0;
+            int end = 1000;
+            if(states.size() < 1000){
+                end = states.size() - 1;
+            }
+            while(i < end){
+                bestSelected.add(states.get(i));
+                i++;
+            }
+
             FileOutputStream fileout = new FileOutputStream(new File("soluciones/"+fileName+".xls"));
             Workbook ficheroWb = new HSSFWorkbook();
             Sheet sheet = ficheroWb.createSheet("Soluciones");
@@ -71,13 +88,23 @@ public class PrinterTools {
             row.createCell(1).setCellValue("Capacidad");
             row.createCell(2).setCellValue("Empaquetado");
             int rowIndex = 1;
-            for(State s: states){
+            for(State s: bestSelected){
                 row = sheet.createRow(rowIndex);
                 row.createCell(0).setCellValue(Tools.reEvaluateCost(s,problemInstance));
                 row.createCell(1).setCellValue(s.getEvaluation().get(1));
                 row.createCell(2).setCellValue(s.getEvaluation().get(2));
                 rowIndex++;
             }
+
+            Row init = sheet.getRow(0);
+            init.createCell(3).setCellValue("FP Size");
+            init.createCell(4).setCellValue("Ave. Cost");
+            init.createCell(5).setCellValue("Ave. Time");
+            init = sheet.getRow(1);
+            init.createCell(3).setCellValue(states.size());
+            init.createCell(4).setCellValue(params.getAverage());
+            init.createCell(5).setCellValue(params.getAverageTime());
+
             ficheroWb.write(fileout);
             fileout.flush();
         }catch (IOException ex)

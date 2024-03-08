@@ -47,7 +47,7 @@ public class Experimenter {
 
     private Problem configProblem()
     {
-        execNumber = 5;
+        execNumber = 30;
         countMaxIterations = 60000;
         Validator validator = new Validator();
         validator.setProblemInstance(problemInstance);
@@ -102,7 +102,7 @@ public class Experimenter {
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"LS_PF_Final_"+problemInstance.getName(), problemInstance);
+        PrinterTools.saveStates(realPF,"LS_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("LocalSearch",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
@@ -132,7 +132,7 @@ public class Experimenter {
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"MOTS_PF_Final_"+problemInstance.getName(), problemInstance);
+        PrinterTools.saveStates(realPF,"MOTS_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("TabuSearch",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
@@ -163,7 +163,7 @@ public class Experimenter {
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"UMOSA_PF_Final_"+problemInstance.getName(), problemInstance);
+        PrinterTools.saveStates(realPF,"UMOSA_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("UMOSA",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
@@ -174,6 +174,7 @@ public class Experimenter {
     {
         AlgParams params = new AlgParams(999999999);
         params.setName(problemInstance.getName());
+        double timeInit = (double)System.currentTimeMillis();
         for (int i = 0; i < execNumber; i++)
         {
             configElementsOfStrategy(this.problem);
@@ -193,10 +194,11 @@ public class Experimenter {
             //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
             //PrinterTools.saveStates(pf,"NSGAII_PF_"+i+"_"+problemInstance.getName(), problemInstance);
         }
+        double timeFinal = (double)System.currentTimeMillis() - timeInit;
         params.setAverage(params.getAverage() / execNumber);
-        params.setAverageTime(params.getAverageTime() / execNumber);
+        params.setAverageTime((float) (timeFinal / execNumber));
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"NSGAII_PF_Final_"+problemInstance.getName(), problemInstance);
+        PrinterTools.saveStates(realPF,"NSGAII_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("NSGAII",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
@@ -207,6 +209,7 @@ public class Experimenter {
     {
         AlgParams params = new AlgParams(999999999);
         params.setName(problemInstance.getName());
+        double timeInit = (double)System.currentTimeMillis();
         for (int i = 0; i < execNumber; i++)
         {
             configElementsOfStrategy(this.problem);
@@ -227,10 +230,11 @@ public class Experimenter {
             //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
             //PrinterTools.saveStates(pf,"MOGA_PF_"+i+"_"+problemInstance.getName(), problemInstance);
         }
+        double timeFinal = (double)System.currentTimeMillis() - timeInit;
         params.setAverage(params.getAverage() / execNumber);
-        params.setAverageTime(params.getAverageTime() / execNumber);
+        params.setAverageTime((float) (timeFinal / execNumber));
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"MOGA_PF_Final_"+problemInstance.getName(), problemInstance);
+        PrinterTools.saveStates(realPF,"MOGA_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("MOGA",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
@@ -294,6 +298,7 @@ public class Experimenter {
                 resultToRemove.clear();
             }
         }
+
         return result;
     }
 
