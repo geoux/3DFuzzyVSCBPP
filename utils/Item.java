@@ -13,13 +13,23 @@ import java.io.Serializable;
  */
 public class Item implements Serializable{
     
-    private float weight;
+    private final int weight;
 
-    public Item(float weight) {
+    private int priority;
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public Item(int weight) {
         this.weight = weight;
     }
     
-    public float getWeight() {
+    public int getWeight() {
         return weight;
     }
 
@@ -29,21 +39,4 @@ public class Item implements Serializable{
         hash = 37 * hash + Float.floatToIntBits(this.weight);
         return hash;
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
-        }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        final Item other = (Item) obj;
-        if (Float.floatToIntBits(this.weight) != Float.floatToIntBits(other.weight)) {
-            return false;
-        }
-        return true;
-    }
-    
-    
 }

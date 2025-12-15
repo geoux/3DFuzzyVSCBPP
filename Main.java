@@ -33,20 +33,6 @@ public class Main{
             e.printStackTrace();
         }
 
-        /*
-        System.out.println();
-        System.out.println("INSTANCES AVAILABLE");
-        int index = 1;
-        for (String name: instanceAddress) {
-            System.out.println(index+"- "+name);
-            index++;
-        }
-
-        System.out.println("Select the Instance (1-"+(index - 1)+"):");
-        Scanner tmp = new Scanner(System.in);
-        int instance = tmp.nextInt();
-        */
-
         int index = 0;
         for(String addr : instanceAddress){
             try {
@@ -54,10 +40,10 @@ public class Main{
                 problemInstance.setTolerancePercent(0.2f);
                 problemInstance.sortAllLists();
                 Experimenter exe = new Experimenter(problemInstance);
-                //exe.LocalSearch();
-                //exe.RSMOU_Alg();
-                exe.NSGAII_Alg();
-                exe.MOGA_Alg();
+                exe.LocalSearch();
+                exe.RSMOU_Alg();
+                //exe.NSGAII_Alg();
+                //exe.MOGA_Alg();
             } catch (InstantiationException | InvocationTargetException | NoSuchMethodException | IllegalAccessException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
