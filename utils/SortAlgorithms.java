@@ -4,7 +4,7 @@ import java.util.ArrayList;
 
 public class SortAlgorithms {
 
-    private static int partition(ArrayList<Integer> cap, ArrayList<Float> cost, int begin, int end) {
+    private static int partition(ArrayList<Integer> cap, ArrayList<Integer> cost, int begin, int end) {
         int pivot = cap.get(end);
         int i = (begin-1);
 
@@ -17,7 +17,7 @@ public class SortAlgorithms {
                 cap.set(j,swapTemp);
 
                 if(cost != null){
-                    float swapTempCost = cost.get(i);
+                    int swapTempCost = cost.get(i);
                     cost.set(i,cost.get(j));
                     cost.set(j,swapTempCost);
                 }
@@ -29,7 +29,7 @@ public class SortAlgorithms {
         cap.set(end, swapTemp);
 
         if(cost != null){
-            float swapTempCost = cost.get(i+1);
+            int swapTempCost = cost.get(i+1);
             cost.set(i+1,cost.get(end));
             cost.set(end, swapTempCost);
         }
@@ -37,7 +37,7 @@ public class SortAlgorithms {
         return i+1;
     }
 
-    static void quickSort(ArrayList<Integer> cap, ArrayList<Float> cost, int begin, int end) {
+    static void quickSort(ArrayList<Integer> cap, ArrayList<Integer> cost, int begin, int end) {
         if (begin < end) {
             int partitionIndex = partition(cap, cost, begin, end);
 

@@ -8,9 +8,9 @@ import java.util.Optional;
 
 public class PackingState {
     private int id;
-    private float capacity;
+    private int capacity;
     private float tolerance;
-    private ArrayList<Pair<Integer,Float>> items;
+    private ArrayList<Pair<Integer,Integer>> items;
 
     public PackingState() {
         items = new ArrayList<>();
@@ -28,15 +28,15 @@ public class PackingState {
         return capacity;
     }
 
-    public void setCapacity(float capacity) {
+    public void setCapacity(int capacity) {
         this.capacity = capacity;
     }
 
-    public ArrayList<Pair<Integer, Float>> getItems() {
+    public ArrayList<Pair<Integer, Integer>> getItems() {
         return items;
     }
 
-    public void setItems(ArrayList<Pair<Integer, Float>> items) {
+    public void setItems(ArrayList<Pair<Integer, Integer>> items) {
         this.items = items;
     }
 

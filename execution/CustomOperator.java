@@ -10,6 +10,7 @@ import utils.ProblemInstance;
 import utils.Tools;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -29,6 +30,65 @@ public class CustomOperator extends Operator {
     *************************************************/
     @Override
     public List<State> generatedNewState(State state, Integer integer) {
+        // 1. Selección de un item aleatorio que esté empaquetado (value != -1)
+        int key;
+        int value = -1;
+        List<Object> code = state.getCode();
+
+        // Evitar bucles infinitos si no hay items empaquetados
+        for (int attempts = 0; attempts < 100; attempts++) {
+            key = Strategy.getStrategy().getProblem().getCodification().getAleatoryKey();
+            value = (int) code.get(key);
+            if (value != -1) break;
+        }
+
+        // 2. Determinar el valor de calidad (min)
+        double min;
+        if (state.getEvaluation().isEmpty()) {
+            // Obtenemos la peor pertenencia si no hay evaluación previa
+            min = Heuristics.getCapacityMembership(state, problemInstance).stream()
+                    .mapToDouble(Double::doubleValue)
+                    .min().orElse(0.0);
+        } else {
+            // Según tu código, el índice 1 es el que determina si hay violación de capacidad
+            min = state.getEvaluation().get(1).doubleValue();
+        }
+
+        // 3. Cálculo de probabilidad adaptativa (crece con las iteraciones)
+        double current = Strategy.getStrategy().getCountCurrent();
+        double max = Strategy.getStrategy().getCountMax();
+        double probabilityOperator = current / max;
+
+        double roulette = Math.random();
+
+        // 4. Selección de Heurística (Lógica simplificada)
+        if (roulette < probabilityOperator) {
+            // A medida que avanza la ejecución, tendemos más a la mutación estándar
+            Heuristics.mutationOperator(state, problemInstance, value);
+        } else {
+            // Si la solución tiene violaciones de capacidad (min < 1)
+            if (min < 1) {
+                if (Math.random() > 0.5) {
+                    Heuristics.capacityMembershipOperator(state, problemInstance);
+                } else {
+                    Heuristics.packingMembershipOperator(state, problemInstance);
+                }
+            } else {
+                // Si la solución ya es factible, nos centramos en re-empaquetar o mutar
+                if (Math.random() > 0.5) {
+                    Heuristics.mutationOperator(state, problemInstance, value);
+                } else {
+                    Heuristics.packingMembershipOperator(state, problemInstance);
+                }
+            }
+        }
+
+        // Retornamos la vecindad (en este caso un solo estado)
+        return Collections.singletonList(state);
+    }
+    /*
+
+    public List<State> generatedNewState(State state, Integer integer) {
         boolean ok = false;
         int key;
         int value = 0;
@@ -45,7 +105,7 @@ public class CustomOperator extends Operator {
         }else{
             min = state.getEvaluation().get(1);
         }
-        double probabilityOperator = 1 - ((Strategy.getStrategy().getCountMax()-Strategy.getStrategy().getCountCurrent())/Strategy.getStrategy().getCountMax());
+        double probabilityOperator = 1 - (double) (Strategy.getStrategy().getCountMax() - Strategy.getStrategy().getCountCurrent()) /Strategy.getStrategy().getCountMax();
         double roulette = Math.random();
         if(min < 1){
             if(roulette < probabilityOperator)
@@ -67,7 +127,7 @@ public class CustomOperator extends Operator {
         listNeigborhood.add(state);
         return listNeigborhood;
     }
-
+*/
     /*****************************************
     * SE IGNORA EL PARAMETRO SEGUN CYNTHIA
     * Este se ejecuta en todos los algoritmos
@@ -123,7 +183,7 @@ public class CustomOperator extends Operator {
             sonState.getCode().add(-1);
             int index = 0;
             boolean found = false;
-            Pair<Integer,Float> item = new ImmutablePair<>(i,problemInstance.getItems().get(i));
+            Pair<Integer,Integer> item = new ImmutablePair<>(i,problemInstance.getItems().get(i));
             while(index < packingStates.size() && !found){
                 if(packingStates.get(index).getId() == itemPosition){
                     packingStates.get(index).getItems().add(item);
@@ -134,7 +194,7 @@ public class CustomOperator extends Operator {
         }
 
         //Seleccionar la estrategia de reparacion
-        ArrayList<Pair<Integer,Float>> candidates = new ArrayList<>();
+        ArrayList<Pair<Integer,Integer>> candidates = new ArrayList<>();
         if(Math.random() < 0.5){
             selectCandidates(candidates,packingStates);
         }else{
@@ -143,7 +203,7 @@ public class CustomOperator extends Operator {
 
         for(int j = 0; j < sonState.getPacking().length; j++){
             sonState.getPacking()[j] = packingStates.get(j).getUsedCapacity();
-            for(Pair<Integer,Float> it : packingStates.get(j).getItems()){
+            for(Pair<Integer,Integer> it : packingStates.get(j).getItems()){
                 sonState.getCode().set(it.getLeft(),j);
             }
         }
@@ -153,14 +213,14 @@ public class CustomOperator extends Operator {
         return newInd;
     }
 
-    private void selectCandidates(ArrayList<Pair<Integer,Float>> candidates,ArrayList<PackingState> packingStates){
+    private void selectCandidates(ArrayList<Pair<Integer,Integer>> candidates,ArrayList<PackingState> packingStates){
         packingStates.forEach(b -> {
             b.sortItems();
             if(b.getOverload() > 0){
                 boolean enough = false;
                 int position = 0;
                 while(!enough){
-                    Pair<Integer,Float> extracted = new ImmutablePair<>(b.getItems().get(position).getLeft(),b.getItems().get(position).getRight());
+                    Pair<Integer,Integer> extracted = new ImmutablePair<>(b.getItems().get(position).getLeft(),b.getItems().get(position).getRight());
                     candidates.add(extracted);
                     b.getItems().remove(position);
                     if(b.getOverload() == 0){
@@ -171,13 +231,13 @@ public class CustomOperator extends Operator {
         });
     }
 
-    private void fixCrossover(ArrayList<Pair<Integer,Float>> candidates,ArrayList<PackingState> packingStates)
+    private void fixCrossover(ArrayList<Pair<Integer,Integer>> candidates,ArrayList<PackingState> packingStates)
     {
         selectCandidates(candidates,packingStates);
         candidates.sort(Comparator.comparing(p -> -p.getRight()));
-        ArrayList<Pair<Integer,Float>> unablesToRepack = new ArrayList<>();
-        if(candidates.size() > 0){
-            for(Pair<Integer,Float> c : candidates){
+        ArrayList<Pair<Integer,Integer>> unablesToRepack = new ArrayList<>();
+        if(!candidates.isEmpty()){
+            for(Pair<Integer,Integer> c : candidates){
                 boolean packed = false;
                 int index = 0;
                 while(index < packingStates.size() && !packed){

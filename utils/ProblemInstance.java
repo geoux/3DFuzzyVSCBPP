@@ -11,8 +11,9 @@ public class ProblemInstance {
 
     private String name;
     private ArrayList<Integer> capacities;
-    private ArrayList<Float> costs;
-    private ArrayList<Float> items;
+    private ArrayList<Integer> costs;
+    private ArrayList<Integer> items;
+    private ArrayList<Integer> itemsPriorities;
     private float Optimal;
     private float tolerancePercent;
     private ArrayList<Triple<Integer,Integer,Integer>> binTypes;
@@ -21,6 +22,7 @@ public class ProblemInstance {
         capacities = new ArrayList<>();
         costs = new ArrayList<>();
         items = new ArrayList<>();
+        itemsPriorities = new ArrayList<>();
         binTypes = new ArrayList<>();
     }
 
@@ -28,14 +30,17 @@ public class ProblemInstance {
         return capacities;
     }
 
-    public ArrayList<Float> getCosts() {
+    public ArrayList<Integer> getCosts() {
         return costs;
     }
 
-    public ArrayList<Float> getItems() {
+    public ArrayList<Integer> getItems() {
         return items;
     }
 
+    public ArrayList<Integer> getItemsPriorities() {
+        return itemsPriorities;
+    }
     public float getOptimal() {
         return Optimal;
     }
@@ -54,7 +59,7 @@ public class ProblemInstance {
 
     public void sortAllLists(){
         SortAlgorithms.quickSort(capacities,costs,0, capacities.size()-1);
-        items.sort(Comparator.comparing(Float::floatValue).reversed());
+        items.sort(Comparator.comparing(Integer::floatValue).reversed());
         int cap = capacities.get(0);
         int start = 0;
         for(int i = 1; i < capacities.size(); i++){

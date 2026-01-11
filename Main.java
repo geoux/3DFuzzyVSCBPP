@@ -41,9 +41,12 @@ public class Main{
                 problemInstance.sortAllLists();
                 Experimenter exe = new Experimenter(problemInstance);
                 exe.LocalSearch();
+                /*
                 exe.RSMOU_Alg();
-                //exe.NSGAII_Alg();
-                //exe.MOGA_Alg();
+                exe.NSGAII_Alg();
+                exe.MOGA_Alg();
+                exe.LocalSearchHigherDistance();
+                 */
             } catch (InstantiationException | InvocationTargetException | NoSuchMethodException | IllegalAccessException | ClassNotFoundException e) {
                 e.printStackTrace();
             }

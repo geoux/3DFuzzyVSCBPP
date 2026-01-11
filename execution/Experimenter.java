@@ -47,7 +47,7 @@ public class Experimenter {
 
     private Problem configProblem()
     {
-        execNumber = 30;
+        execNumber = 10;
         countMaxIterations = 60000;
         Validator validator = new Validator();
         validator.setProblemInstance(problemInstance);
@@ -55,17 +55,21 @@ public class Experimenter {
         operator.setProblemInstance(problemInstance);
         FO_Cost objectiveCost = new FO_Cost();
         objectiveCost.setProblemInstance(problemInstance);
-        objectiveCost.setTypeProblem(Problem.ProblemType.Maximizar);
+        objectiveCost.setTypeProblem(Problem.ProblemType.Minimizar);
         FO_Membership objectiveMembership = new FO_Membership();
         objectiveMembership.setProblemInstance(problemInstance);
         objectiveMembership.setTypeProblem(Problem.ProblemType.Maximizar);
         FO_Packing objectivePacking = new FO_Packing();
         objectivePacking.setProblemInstance(problemInstance);
         objectivePacking.setTypeProblem(Problem.ProblemType.Maximizar);
+        FO_Priority objectivePriority = new FO_Priority();
+        objectivePriority.setProblemInstance(problemInstance);
+        objectivePriority.setTypeProblem(Problem.ProblemType.Maximizar);
         ArrayList<ObjetiveFunction> listObjFunt = new ArrayList<>();
         listObjFunt.add(objectiveCost);
         listObjFunt.add(objectiveMembership);
         listObjFunt.add(objectivePacking);
+        listObjFunt.add(objectivePriority);
 
         this.problem = new Problem();
         this.problem.setCodification(validator);
@@ -240,6 +244,75 @@ public class Experimenter {
         aproximateRealParetoFront.clear();
     }
 
+    private List<State> extractNonDominated(List<State> states, ProblemInstance problemInstance) {
+        if (states.isEmpty()) return new ArrayList<>();
+        boolean[] config = {false, true, true, true};
+
+        // 1. Ordenamos por el objetivo que minimizamos (Obj 0).
+        // Si empatan, desempatamos por los que maximizamos (descendente) para descartar antes.
+        states.sort(Comparator.comparing((State s) -> s.getEvaluation().get(0).floatValue())
+                .thenComparing(Comparator.comparing((State s) -> s.getEvaluation().get(1).floatValue()).reversed())
+                .thenComparing(Comparator.comparing((State s) -> s.getEvaluation().get(2).floatValue()).reversed()));
+
+        List<State> paretoFront = new ArrayList<>();
+
+        for (State candidate : states) {
+            // Ignorar estados inválidos (los que tienen -1 según tu lógica)
+            if (candidate.getEvaluation().stream().anyMatch(v -> v.floatValue() == -1)) continue;
+
+            boolean isDominated = false;
+
+            // Comparamos el candidato contra los que ya están en el frente
+            // Usamos un Iterator por si necesitáramos borrar, aunque con el Sort previo
+            // normalmente solo añadimos o descartamos el nuevo.
+            for (State existing : paretoFront) {
+                if (checkDominance(existing, candidate, config)) { // ¿El existente domina al nuevo?
+                    isDominated = true;
+                    break;
+                }
+            }
+
+            if (!isDominated) {
+                // Eliminar de paretoFront cualquier solución que el nuevo candidato domine
+                // (Aunque con el Sort por Obj 0, es menos probable que ocurra, pero asegura integridad)
+                paretoFront.removeIf(existing -> checkDominance(candidate, existing, config));
+                paretoFront.add(candidate);
+            }
+        }
+        return paretoFront;
+    }
+
+    /**
+     * s1 domina a s2 si:
+     * 1. s1 es mejor o igual que s2 en TODOS los objetivos.
+     * 2. s1 es estrictamente mejor que s2 en al menos UNO.
+     * * @param isMaximize Array booleano donde true = Maximizar, false = Minimizar
+     */
+    private boolean checkDominance(State s1, State s2, boolean[] isMaximize) {
+        List<Double> e1 = s1.getEvaluation();
+        List<Double> e2 = s2.getEvaluation();
+
+        boolean betterInAny = false;
+
+        for (int i = 0; i < e1.size(); i++) {
+            double v1 = e1.get(i);
+            double v2 = e2.get(i);
+
+            if (isMaximize[i]) {
+                // Caso Maximizar: v1 debe ser >= v2
+                if (v1 < v2) return false; // s2 es mejor en este punto, s1 no domina
+                if (v1 > v2) betterInAny = true;
+            } else {
+                // Caso Minimizar: v1 debe ser <= v2
+                if (v1 > v2) return false; // s2 es mejor en este punto, s1 no domina
+                if (v1 < v2) betterInAny = true;
+            }
+        }
+
+        return betterInAny;
+    }
+
+    /*
     private List<State> extractNonDominated(List<State> states, ProblemInstance problemInstance){
         states.sort(Comparator.comparing((State s) -> s.getEvaluation().get(0))
                 .thenComparing((State s) -> s.getEvaluation().get(1))
@@ -302,7 +375,6 @@ public class Experimenter {
         return result;
     }
 
-    /*
     private List<State> extractNonDominated(List<State> states, ProblemInstance problemInstance)
     {
         ArrayList<State> toRemove = new ArrayList<>();

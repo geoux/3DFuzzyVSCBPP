@@ -5,9 +5,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import problem.definition.State;
 import utils.ProblemInstance;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 
@@ -80,15 +78,6 @@ public class Heuristics {
             while(index < tmpCapacities.length && !packed){
                 float tolerance = problemInstance.getTolerancePercent()*problemInstance.getCapacities().get(index);
                 float modCap = (float) (tmpCapacities[index] + alpha*tolerance);
-//                float modCap = 0;
-//                switch (capacities.get(index)){
-//                    case 50 : modCap = (float) (tmpCapacities[index] + alpha*6);
-//                        break;
-//                    case 100 : modCap = (float) (tmpCapacities[index] + alpha*5);
-//                        break;
-//                    case 150 : modCap = (float) (tmpCapacities[index] + alpha*7);
-//                        break;
-//                }
                 if(problemInstance.getItems().get(j) <= modCap){
                     tmpCapacities[index] -= problemInstance.getItems().get(j);
                     assigment.add(index);
@@ -124,35 +113,26 @@ public class Heuristics {
 
     static void mutationOperator(State state, ProblemInstance problemInstance, int key)
     {
-        ArrayList<ImmutablePair<Integer, Float>> itemsToRepack = new ArrayList<>();
-        ArrayList<ImmutablePair<Integer, Float>> unpacked = new ArrayList<>();
+        ArrayList<ImmutablePair<Integer, Integer>> itemsToRepack = new ArrayList<>();
+        ArrayList<ImmutablePair<Integer, Integer>> unpacked = new ArrayList<>();
         double alpha = Math.random();
         if(state.getPacking() == null)
             packingState(state, problemInstance);
         for (int i = 0; i < state.getCode().size(); i++) {
             if ((int) state.getCode().get(i) == key) {
-                ImmutablePair<Integer, Float> element = new ImmutablePair<>(i, problemInstance.getItems().get(i));
+                ImmutablePair<Integer, Integer> element = new ImmutablePair<>(i, problemInstance.getItems().get(i));
                 itemsToRepack.add(element);
                 state.getCode().set(i, -1);
             }
         }
         state.getPacking()[key] = problemInstance.getCapacities().get(key);
-        itemsToRepack.sort(Comparator.comparing(ImmutablePair<Integer, Float>::getRight).reversed());
+        itemsToRepack.sort(Comparator.comparing(ImmutablePair<Integer, Integer>::getRight).reversed());
         itemsToRepack.forEach(item ->{
             boolean packed = false;
             int index = 0;
             while(index < state.getPacking().length && !packed){
                 float tolerance = problemInstance.getTolerancePercent()*problemInstance.getCapacities().get(index);
                 float modCap = (float) (state.getPacking()[index] + alpha*tolerance);
-//                float modCap = 0;
-//                switch (problemInstance.getCapacities().get(index)){
-//                    case 50 : modCap = (float) (state.getPacking()[index] + alpha*6);
-//                        break;
-//                    case 100 : modCap = (float) (state.getPacking()[index] + alpha*5);
-//                        break;
-//                    case 150 : modCap = (float) (state.getPacking()[index] + alpha*7);
-//                        break;
-//                }
                 if(item.getRight() <= modCap && key != index){
                     state.getPacking()[index] -= item.getRight();
                     state.getCode().set(item.getLeft(),index);
@@ -173,6 +153,99 @@ public class Heuristics {
         }
     }
 
+    /*Protección de Prioridad: He modificado la búsqueda del ítem en el minIndex.
+    Ahora el algoritmo intenta elegir un ítem que no sea de prioridad máxima para moverlo.
+    Esto evita que los ítems críticos estén "saltando" de bin en bin innecesariamente.
+    Cálculo de Espacio Libre: Tu código original usaba state.getPacking()[i] como si fuera la carga acumulada, pero en los métodos anteriores lo tratábamos como espacio restante.
+    He unificado la lógica: packing[i] es el espacio libre. Si es negativo, hay sobrecarga.Eficiencia de tipos:
+    Cambiado 999999 por Double.MAX_VALUE.Uso de float y double de forma coherente con tus estructuras (float[] para el packing).
+    Casting de (int) para los Object del code.Lógica de Pertenencia ($\alpha$):
+    He refinado el cálculo de alpha para que represente qué tan "cómodo" queda el ítem en el nuevo bin comparado con el desastre que era el bin anterior (minValue).
+     */
+    static void capacityMembershipOperator(State state, ProblemInstance problemInstance) {
+        // 1. Obtener pertenencias y encontrar el bin con el valor mínimo (peor estado)
+        List<Double> ms = getCapacityMembership(state, problemInstance);
+        double minValue = Double.MAX_VALUE;
+        int minIndex = -1;
+
+        for (int i = 0; i < ms.size(); i++) {
+            if (ms.get(i) < minValue) {
+                minValue = ms.get(i);
+                minIndex = i;
+            }
+        }
+
+        if (minIndex == -1) return;
+
+        // 2. Identificar el ítem más ligero en el bin crítico
+        // Añadimos lógica de prioridad: No queremos sacar ítems de prioridad máxima si podemos evitarlo
+        List<Object> code = state.getCode();
+        List<Integer> items = problemInstance.getItems();
+        List<Integer> priorities = problemInstance.getItemsPriorities();
+        int maxPriority = priorities.stream().mapToInt(Integer::intValue).max().orElse(0);
+
+        double minWeight = Double.MAX_VALUE;
+        int position = -1;
+
+        for (int i = 0; i < code.size(); i++) {
+            if ((int) code.get(i) == minIndex) {
+                // Priorizamos sacar ítems que NO sean de prioridad máxima
+                // O si todos son de prioridad máxima, el más ligero
+                int currentPriority = priorities.get(i);
+                double currentWeight = items.get(i).doubleValue();
+
+                if (position == -1 || (currentPriority < maxPriority && currentWeight < minWeight)) {
+                    minWeight = currentWeight;
+                    position = i;
+                }
+            }
+        }
+
+        if (position == -1) return;
+
+        // 3. Buscar un nuevo bin (found) para mover el ítem
+        int found = -1;
+        float[] packing = state.getPacking();
+        List<Integer> capacities = problemInstance.getCapacities();
+        float tolerancePercent = (float) problemInstance.getTolerancePercent();
+        float itemWeight = items.get(position).floatValue();
+
+        for (int i = 0; i < packing.length; i++) {
+            if (i == minIndex) continue;
+
+            float capacity = capacities.get(i).floatValue();
+            float tolerance = tolerancePercent * capacity;
+            float currentFreeSpace = packing[i]; // Espacio libre actual
+
+            // ¿Cabe con la tolerancia?
+            if (currentFreeSpace + tolerance >= itemWeight) {
+                float spaceAfterMove = currentFreeSpace - itemWeight;
+
+                // Si cabe sin exceder la capacidad nominal, es una buena opción
+                if (spaceAfterMove >= 0) {
+                    found = i;
+                    break; // Encontrado bin ideal
+                } else {
+                    // Si requiere usar tolerancia, evaluamos si la nueva pertenencia es mejor que la original
+                    double alpha = (tolerance - Math.abs(spaceAfterMove)) / tolerance;
+                    if (alpha > minValue) {
+                        found = i;
+                    }
+                }
+            }
+        }
+
+        // 4. Ejecutar el movimiento si se encontró un sitio mejor
+        if (found > -1) {
+            // Devolver el peso al bin antiguo
+            packing[minIndex] += itemWeight;
+            // Restar el peso al nuevo bin
+            packing[found] -= itemWeight;
+            // Actualizar el código
+            code.set(position, found);
+        }
+    }
+    /*
     static void capacityMembershipOperator(State state, ProblemInstance problemInstance) {
         double minValue = 9999999;
         int minIndex = -1;
@@ -198,15 +271,6 @@ public class Heuristics {
         int found = -1;
         for(int i = 0; i < state.getPacking().length; i++){
             if(state.getPacking()[i] < problemInstance.getCapacities().get(i) && i != minIndex){
-//                int tolerance = 0;
-//                switch (problemInstance.getCapacities().get(i)) {
-//                    case 50: tolerance = 6;
-//                        break;
-//                    case 100: tolerance = 5;
-//                        break;
-//                    case 150: tolerance = 7;
-//                        break;
-//                }
                 float tolerance = problemInstance.getTolerancePercent()*problemInstance.getCapacities().get(i);
                 float modCap = state.getPacking()[i] + tolerance;
                 if(modCap >= problemInstance.getItems().get(position)){
@@ -229,6 +293,7 @@ public class Heuristics {
         }
 
     }
+     */
 
     public static ArrayList<Double> getCapacityMembership(State state, ProblemInstance problemInstance)
     {
@@ -237,19 +302,6 @@ public class Heuristics {
         ArrayList<Double> membership = new ArrayList<>();
         int i = 0;
         while (i < state.getPacking().length) {
-//            float maxOverload = 0;
-//            int currentCap = problemInstance.getCapacities().get(i);
-//            switch (currentCap) {
-//                case 50:
-//                    maxOverload = 6;
-//                    break;
-//                case 100:
-//                    maxOverload = 5;
-//                    break;
-//                case 150:
-//                    maxOverload = 7;
-//                    break;
-//            }
             float maxOverload = problemInstance.getTolerancePercent()*problemInstance.getCapacities().get(i);
             if (state.getPacking()[i] < 0) {
                 float realOverload = Math.abs(0 - state.getPacking()[i]);
@@ -257,10 +309,6 @@ public class Heuristics {
                     membership.add(0d);
                 } else {
                     float difference = maxOverload - realOverload;
-                    //If difference is less than 1
-                    //it can be considered full load
-//                        if(difference < 1)
-//                            difference = 1;
                     double alpha = difference / maxOverload;
                     membership.add(alpha);
                 }
@@ -280,6 +328,75 @@ public class Heuristics {
     5- Si esta usado modifico en -1 cada item asignado a ese bin
     6- Restauro el peso original de ese bin en el empaquetado resultante
     ***************************************************************************/
+    static void packingMembershipOperator(State state, ProblemInstance problemInstance) {
+        if (state.getPacking() == null)
+            packingState(state, problemInstance);
+
+        // Ajuste de tipos según tu estructura
+        List<Object> code = state.getCode();
+        float[] packing = state.getPacking();
+        List<Integer> itemWeights = problemInstance.getItems();
+        List<Integer> capacities = problemInstance.getCapacities();
+        List<Integer> priorities = problemInstance.getItemsPriorities();
+
+        // --- 1. FASE DE EMPAQUETAMIENTO INICIAL ---
+        for (int i = 0; i < code.size(); i++) {
+            if ((int)code.get(i) == -1) {
+                tryPackItem(i, code, packing, itemWeights);
+            }
+        }
+
+        // --- 2. FASE DE VACIADO PROBABILÍSTICO ---
+        Set<Integer> binsToEmpty = new HashSet<>();
+        problemInstance.getBinTypes().forEach(bt -> {
+            double probability = Math.random();
+            // Calculamos el límite del primer tercio del rango
+            int limit = bt.getMiddle() + (bt.getRight() - bt.getMiddle()) / 3;
+
+            for (int j = bt.getMiddle(); j <= limit; j++) {
+                if (Math.random() > probability) {
+                    // Comprobamos si el bin no está lleno comparando con su capacidad original
+                    if (packing[j] < capacities.get(j).floatValue()) {
+                        binsToEmpty.add(j);
+                    }
+                }
+            }
+        });
+
+        // Vaciado en una sola pasada O(N)
+        for (int k = 0; k < code.size(); k++) {
+            int currentBin = (int)code.get(k);
+            if (binsToEmpty.contains(currentBin)) {
+                packing[currentBin] += itemWeights.get(k).floatValue();
+                code.set(k, -1);
+            }
+        }
+
+        // --- 3. CICLO DE CORRECCIÓN POR PRIORIDAD ---
+        // Buscamos la prioridad máxima
+        int maxPriority = priorities.stream().mapToInt(Integer::intValue).max().orElse(0);
+
+        for (int i = 0; i < code.size(); i++) {
+            // Si el ítem es de alta prioridad y está fuera, intentamos reinsertarlo
+            if ((int)code.get(i) == -1 && priorities.get(i) == maxPriority) {
+                tryPackItem(i, code, packing, itemWeights);
+            }
+        }
+    }
+
+    // Método auxiliar ajustado a float[] e Integer
+    private static boolean tryPackItem(int itemIdx, List<Object> code, float[] packing, List<Integer> weights) {
+        float weight = weights.get(itemIdx).floatValue();
+        for (int j = 0; j < packing.length; j++) {
+            if (packing[j] >= weight) {
+                code.set(itemIdx, j);
+                packing[j] -= weight;
+                return true;
+            }
+        }
+        return false;
+    }
+    /*
     static void packingMembershipOperator(State state, ProblemInstance problemInstance) {
         if(state.getPacking() == null)
             packingState(state,problemInstance);
@@ -318,6 +435,7 @@ public class Heuristics {
             }
         });
     }
+     */
 
     public static Double getPackingMembership(State state, ProblemInstance problemInstance)
     {
@@ -335,8 +453,28 @@ public class Heuristics {
         if(sum == 0){
             return 1d;
         }else{
-            Float totalWeight = problemInstance.getItems().stream().reduce(0f, Float::sum);
+            Integer totalWeight = problemInstance.getItems().stream().reduce(0, Integer::sum);
             return 1 - sum / totalWeight;
+        }
+    }
+
+    public static Double getPackingPriority(State state, ProblemInstance problemInstance)
+    {
+        if(state.getPacking() == null)
+            packingState(state,problemInstance);
+
+        int sum = 0;
+        int i = 0;
+        while (i < state.getCode().size()) {
+            if((int)state.getCode().get(i) == -1){
+                sum += problemInstance.getItemsPriorities().get(i);
+            }
+            i++;
+        }
+        if(sum == 0){
+            return 0.0;
+        }else{
+            return Double.valueOf(problemInstance.getItemsPriorities().stream().reduce(0, Integer::sum));
         }
     }
 }
