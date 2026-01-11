@@ -1,0 +1,1 @@
+java -Djava.util.Arrays.useLegacyMergeSort=true -jar 3DFuzzyVSCBPP.jar

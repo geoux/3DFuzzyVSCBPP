@@ -37,7 +37,8 @@ public class Tools {
             }
 
             while(row != null && row.getCell(2) != null){
-                result.getItems().add((float) row.getCell(2).getNumericCellValue());
+                result.getItems().add((int) row.getCell(2).getNumericCellValue());
+                result.getItemsPriorities().add((int) row.getCell(3).getNumericCellValue());
                 i++;
                 row = sheet.getRow(i);
             }
@@ -46,7 +47,7 @@ public class Tools {
             row = sheet.getRow(i);
             while(row != null && row.getCell(0) != null){
                 result.getCapacities().add((int) row.getCell(0).getNumericCellValue());
-                result.getCosts().add((float) row.getCell(1).getNumericCellValue());
+                result.getCosts().add((int) row.getCell(1).getNumericCellValue());
                 i++;
                 row = sheet.getRow(i);
             }
