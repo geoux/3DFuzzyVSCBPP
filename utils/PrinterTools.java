@@ -74,7 +74,7 @@ public class PrinterTools {
             if(states.size() < 1000){
                 end = states.size() - 1;
             }
-            while(i < end){
+            while(i <= end){
                 bestSelected.add(states.get(i));
                 i++;
             }
@@ -87,23 +87,25 @@ public class PrinterTools {
             row.createCell(0).setCellValue("Costo");
             row.createCell(1).setCellValue("Capacidad");
             row.createCell(2).setCellValue("Empaquetado");
+            row.createCell(3).setCellValue("Prioridad");
             int rowIndex = 1;
             for(State s: bestSelected){
                 row = sheet.createRow(rowIndex);
                 row.createCell(0).setCellValue(Tools.reEvaluateCost(s,problemInstance));
                 row.createCell(1).setCellValue(s.getEvaluation().get(1));
                 row.createCell(2).setCellValue(s.getEvaluation().get(2));
+                row.createCell(3).setCellValue(Tools.reConvertPriorities(s,problemInstance));
                 rowIndex++;
             }
 
             Row init = sheet.getRow(0);
-            init.createCell(3).setCellValue("FP Size");
-            init.createCell(4).setCellValue("Ave. Cost");
-            init.createCell(5).setCellValue("Ave. Time");
+            init.createCell(4).setCellValue("FP Size");
+            init.createCell(5).setCellValue("Ave. Cost");
+            init.createCell(6).setCellValue("Ave. Time");
             init = sheet.getRow(1);
-            init.createCell(3).setCellValue(states.size());
-            init.createCell(4).setCellValue(params.getAverage());
-            init.createCell(5).setCellValue(params.getAverageTime());
+            init.createCell(4).setCellValue(states.size());
+            init.createCell(5).setCellValue(params.getAverage());
+            init.createCell(6).setCellValue(params.getAverageTime());
 
             ficheroWb.write(fileout);
             fileout.flush();
@@ -133,11 +135,13 @@ public class PrinterTools {
                 }
                 writer.newLine();
                 float reEvaluated = Tools.reEvaluateCost(s,problemInstance);
-                writer.write(String.valueOf(reEvaluated));
+                writer.write("sCost: "+String.valueOf(reEvaluated));
                 writer.write(";");
-                writer.write(s.getEvaluation().get(1).toString());
+                writer.write("mCap: "+s.getEvaluation().get(1).toString());
                 writer.write(";");
-                writer.write(s.getEvaluation().get(2).toString());
+                writer.write("mPack: "+s.getEvaluation().get(2).toString());
+                writer.write(";");
+                writer.write("sPrio: "+s.getEvaluation().get(3).toString());
                 writer.newLine();
                 writer.write(String.valueOf(params.getAverageTime()));
                 writer.newLine();
