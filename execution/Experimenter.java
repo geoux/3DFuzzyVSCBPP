@@ -21,6 +21,7 @@ import javax.tools.Tool;
 import java.io.BufferedWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Experimenter {
@@ -29,10 +30,12 @@ public class Experimenter {
     Problem problem;
     private ProblemInstance problemInstance;
     private List<State> aproximateRealParetoFront;
+    private List<State> bestFullMembership;
 
     public Experimenter(ProblemInstance problemInstance) {
         this.problemInstance = problemInstance;
         aproximateRealParetoFront = new ArrayList<>();
+        bestFullMembership = new ArrayList<>();
         configProblem();
     }
 
@@ -97,19 +100,25 @@ public class Experimenter {
             System.out.println("Run number " + i);
             Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.MultiobjectiveStochasticHillClimbing);
 
+            //Extract non dominated on current iteration
             ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
             aproximateRealParetoFront.addAll(pf);
+            State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
+            bestFullMembership.add(currentBestFullMembership);
             PrinterTools.iterationResult("LS", params, pf, Strategy.getStrategy(), i, problemInstance);
-            //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
-            //PrinterTools.saveStates(pf,"LS_PF_"+i+"_"+problemInstance.getName(), problemInstance);
         }
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
+        //Extract non dominated from all previous iterations
         ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
+        State globalBestFullMembership = getFullMbsSolution(bestFullMembership);
+        if(!checkIfExists(globalBestFullMembership,realPF))
+            realPF.add(globalBestFullMembership);
         PrinterTools.saveStates(realPF,"LS_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("LocalSearch",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
+        bestFullMembership.clear();
     }
 
     public void LocalSearchHigherDistance() throws IllegalArgumentException, SecurityException, ClassNotFoundException,
@@ -244,38 +253,62 @@ public class Experimenter {
         aproximateRealParetoFront.clear();
     }
 
-    private List<State> extractNonDominated(List<State> states, ProblemInstance problemInstance) {
-        if (states.isEmpty()) return new ArrayList<>();
-        boolean[] config = {false, true, true, true};
+    /**
+     * Devuelve la mejor solucion (menor costo, maxima prioridad) con pertenencia 1 en restricciones
+     * Retorna: vector solucion
+     */
+    private State getFullMbsSolution(List<State> states){
+        State result = new State();
+        for (State candidate : states) {
+            if(result.getCode().isEmpty()){
+                if(candidate.getEvaluation().get(1).floatValue() == 1 && candidate.getEvaluation().get(2).floatValue() == 1){
+                    result = candidate;
+                }
+            }else{
+                if(candidate.getEvaluation().get(1).floatValue() == 1 && candidate.getEvaluation().get(2).floatValue() == 1){
+                    if(result.getEvaluation().get(0).floatValue() > candidate.getEvaluation().get(0).floatValue() &&
+                            result.getEvaluation().get(3).floatValue() < candidate.getEvaluation().get(3).floatValue()){
+                        result = candidate;
+                    }
+                }
+            }
+        }
+        return result;
+    }
 
-        // 1. Ordenamos por el objetivo que minimizamos (Obj 0).
-        // Si empatan, desempatamos por los que maximizamos (descendente) para descartar antes.
-        states.sort(Comparator.comparing((State s) -> s.getEvaluation().get(0).floatValue())
-                .thenComparing(Comparator.comparing((State s) -> s.getEvaluation().get(1).floatValue()).reversed())
-                .thenComparing(Comparator.comparing((State s) -> s.getEvaluation().get(2).floatValue()).reversed()));
+    private List<State> extractNonDominated(List<State> states, ProblemInstance pi) {
+        if (states == null || states.isEmpty()) return new ArrayList<>();
 
+        // Configuración: Obj0 min (false), Obj1-3 max (true)
+        boolean[] isMaximize = {false, true, true, true};
         List<State> paretoFront = new ArrayList<>();
 
         for (State candidate : states) {
-            // Ignorar estados inválidos (los que tienen -1 según tu lógica)
-            if (candidate.getEvaluation().stream().anyMatch(v -> v.floatValue() == -1)) continue;
+            if (isInvalid(candidate)) continue;
 
-            boolean isDominated = false;
+            boolean skipCandidate = false;
+            List<State> toRemove = new ArrayList<>();
 
-            // Comparamos el candidato contra los que ya están en el frente
-            // Usamos un Iterator por si necesitáramos borrar, aunque con el Sort previo
-            // normalmente solo añadimos o descartamos el nuevo.
             for (State existing : paretoFront) {
-                if (checkDominance(existing, candidate, config)) { // ¿El existente domina al nuevo?
-                    isDominated = true;
+                int res = compareDominance(existing, candidate, isMaximize);
+
+                if (res == 1) {
+                    // El existente domina al candidato -> Descartar candidato
+                    skipCandidate = true;
                     break;
+                } else if (res == 0) {
+                    // ¡AQUÍ SE EVITAN DUPLICADOS!
+                    // Son iguales hasta el 4º decimal -> Descartar candidato
+                    skipCandidate = true;
+                    break;
+                } else if (res == -1) {
+                    // El candidato domina al existente -> Marcar para borrar existente
+                    toRemove.add(existing);
                 }
             }
 
-            if (!isDominated) {
-                // Eliminar de paretoFront cualquier solución que el nuevo candidato domine
-                // (Aunque con el Sort por Obj 0, es menos probable que ocurra, pero asegura integridad)
-                paretoFront.removeIf(existing -> checkDominance(candidate, existing, config));
+            if (!skipCandidate) {
+                paretoFront.removeAll(toRemove);
                 paretoFront.add(candidate);
             }
         }
@@ -283,34 +316,47 @@ public class Experimenter {
     }
 
     /**
-     * s1 domina a s2 si:
-     * 1. s1 es mejor o igual que s2 en TODOS los objetivos.
-     * 2. s1 es estrictamente mejor que s2 en al menos UNO.
-     * * @param isMaximize Array booleano donde true = Maximizar, false = Minimizar
+     * Compara dos estados usando redondeo para evitar errores de Double.
+     * Retorna:
+     * 1 si s1 domina a s2
+     * -1 si s2 domina a s1
+     * 0 si son iguales
+     * 2 si son incomparables (ninguno domina al otro)
      */
-    private boolean checkDominance(State s1, State s2, boolean[] isMaximize) {
+    private int compareDominance(State s1, State s2, boolean[] isMaximize) {
         List<Double> e1 = s1.getEvaluation();
         List<Double> e2 = s2.getEvaluation();
 
-        boolean betterInAny = false;
+        boolean s1Better = false;
+        boolean s2Better = false;
+
+        // Factor de escala para 4 decimales
+        double scale = 10.0;
 
         for (int i = 0; i < e1.size(); i++) {
-            double v1 = e1.get(i);
-            double v2 = e2.get(i);
+            // Escalamos y redondeamos para mantener 4 decimales de precisión
+            long v1 = Math.round(e1.get(i) * scale);
+            long v2 = Math.round(e2.get(i) * scale);
 
             if (isMaximize[i]) {
-                // Caso Maximizar: v1 debe ser >= v2
-                if (v1 < v2) return false; // s2 es mejor en este punto, s1 no domina
-                if (v1 > v2) betterInAny = true;
-            } else {
-                // Caso Minimizar: v1 debe ser <= v2
-                if (v1 > v2) return false; // s2 es mejor en este punto, s1 no domina
-                if (v1 < v2) betterInAny = true;
+                if (v1 > v2) s1Better = true;
+                else if (v2 > v1) s2Better = true;
+            } else { // Minimizar
+                if (v1 < v2) s1Better = true;
+                else if (v2 < v1) s2Better = true;
             }
         }
 
-        return betterInAny;
+        if (s1Better && !s2Better) return 1;  // s1 domina
+        if (s2Better && !s1Better) return -1; // s2 domina
+        if (!s1Better && !s2Better) return 0; // Iguales (hasta el 4º decimal)
+        return 2; // Incomparables
     }
+
+    private boolean isInvalid(State s) {
+        return s.getEvaluation().stream().anyMatch(v -> Math.round(v) == -1);
+    }
+
 
     /*
     private List<State> extractNonDominated(List<State> states, ProblemInstance problemInstance){
@@ -428,7 +474,11 @@ public class Experimenter {
         boolean found = false;
         int index = 0;
         while(!found && index < cmp.size()){
-            if(cmp.get(index).getEvaluation().get(0).floatValue() == s.getEvaluation().get(0).floatValue() && cmp.get(index).getEvaluation().get(1).floatValue() == s.getEvaluation().get(1).floatValue()){
+            if(cmp.get(index).getEvaluation().get(0).floatValue() == s.getEvaluation().get(0).floatValue() &&
+                    cmp.get(index).getEvaluation().get(1).floatValue() == s.getEvaluation().get(1).floatValue() &&
+                    cmp.get(index).getEvaluation().get(2).floatValue() == s.getEvaluation().get(2).floatValue() &&
+                    cmp.get(index).getEvaluation().get(3).floatValue() == s.getEvaluation().get(3).floatValue())
+            {
                 found = true;
             }
             index++;

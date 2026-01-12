@@ -474,7 +474,7 @@ public class Heuristics {
         if(sum == 0){
             return 0.0;
         }else{
-            return Double.valueOf(problemInstance.getItemsPriorities().stream().reduce(0, Integer::sum));
+            return (double) sum;
         }
     }
 }

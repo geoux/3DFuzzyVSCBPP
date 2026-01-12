@@ -59,7 +59,7 @@ public class ProblemInstance {
 
     public void sortAllLists(){
         SortAlgorithms.quickSort(capacities,costs,0, capacities.size()-1);
-        items.sort(Comparator.comparing(Integer::floatValue).reversed());
+        //items.sort(Comparator.comparing(Integer::floatValue).reversed());
         int cap = capacities.get(0);
         int start = 0;
         for(int i = 1; i < capacities.size(); i++){
