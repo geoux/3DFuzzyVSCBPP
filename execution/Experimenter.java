@@ -50,8 +50,8 @@ public class Experimenter {
 
     private Problem configProblem()
     {
-        execNumber = 10;
-        countMaxIterations = 60000;
+        execNumber = 30;
+        countMaxIterations = 20000;
         Validator validator = new Validator();
         validator.setProblemInstance(problemInstance);
         CustomOperator operator = new CustomOperator();
@@ -87,6 +87,182 @@ public class Experimenter {
         return problem;
     }
 
+    public void MOGA_Alg() throws IllegalArgumentException, SecurityException, ClassNotFoundException,
+            InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException
+    {
+        AlgParams params = new AlgParams(999999999);
+        params.setName(problemInstance.getName());
+        double timeInit = (double)System.currentTimeMillis();
+        for (int i = 0; i < execNumber; i++)
+        {
+            configElementsOfStrategy(this.problem);
+            System.out.println("********************************");
+            System.out.println("Genetic Algorithm");
+            System.out.println("Instance: "+problemInstance.getName());
+            System.out.println("Run number " + i);
+            MOGA.countRef = 100;
+            MOGA.selectionType = SelectionType.TournamentSelection;
+            MOGA.crossoverType = CrossoverType.GenericCrossover;
+            MOGA.mutationType = MutationType.GenericMutation;
+            MOGA.replaceType = ReplaceType.GenerationalReplace;
+            MOGA.PM = 0.8;
+            MOGA.PC = 0.7;
+            Strategy.getStrategy().initializeGenerators();
+            Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.MOGA);
+
+            ArrayList<State> pf = new ArrayList<>(extractNonDominatedFast(Strategy.getStrategy().listStates));
+            aproximateRealParetoFront.addAll(pf);
+
+            // Filtrar incrementalmente entre runs
+            aproximateRealParetoFront = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
+
+            /*
+            State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
+            bestFullMembership.add(currentBestFullMembership);
+             */
+            PrinterTools.iterationResult("MOGA", params, pf, Strategy.getStrategy(), i, problemInstance);
+            Strategy.destroyExecute();
+        }
+        double timeFinal = (double)System.currentTimeMillis() - timeInit;
+        params.setAverage(params.getAverage() / execNumber);
+        params.setAverageTime((float) (timeFinal / execNumber));
+        ArrayList<State> realPF = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
+
+        /*
+        State globalBestFullMembership = getFullMbsSolution(bestFullMembership);
+        if (!checkIfExists(globalBestFullMembership, realPF)) {
+            realPF.add(globalBestFullMembership);
+            // Re-filtrar tras añadir la solución extra
+            realPF = new ArrayList<>(extractNonDominatedFast(realPF));
+        }
+         */
+        validateParetoFront(realPF);
+        PrinterTools.saveStates(realPF,"MOGA_PF_Final_"+problemInstance.getName(), problemInstance, params);
+        PrinterTools.printSymmary("MOGA",params,problemInstance.getOptimal(),realPF, problemInstance);
+        aproximateRealParetoFront.clear();
+        bestFullMembership.clear();
+
+        Runtime runtime = Runtime.getRuntime();
+        runtime.gc();
+    }
+
+    private List<State> extractNonDominatedFast(List<State> states) {
+        if (states == null || states.isEmpty()) return new ArrayList<>();
+
+        int n = states.size();
+
+        // 1. Pre-calcular objetivos como double sin redondeo
+        double[][] objs = new double[n][4];
+        for (int i = 0; i < n; i++) {
+            State s = states.get(i);
+            objs[i][0] = s.getEvaluation().get(0).doubleValue();
+            objs[i][1] = s.getEvaluation().get(1).doubleValue();
+            objs[i][2] = s.getEvaluation().get(2).doubleValue();
+            objs[i][3] = s.getEvaluation().get(3).doubleValue();
+        }
+
+        // 2. Filtrar soluciones inválidas (cualquier objetivo == -1)
+        List<Integer> validIndices = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            if (objs[i][0] != -1.0 && objs[i][1] != -1.0 &&
+                    objs[i][2] != -1.0 && objs[i][3] != -1.0) {
+                validIndices.add(i);
+            }
+        }
+
+        if (validIndices.isEmpty()) return new ArrayList<>();
+
+        // 3. Eliminar duplicados exactos antes del análisis de dominancia
+        Map<String, Integer> seen = new LinkedHashMap<>();
+        for (int i : validIndices) {
+            String key = objs[i][0] + "," + objs[i][1] + "," + objs[i][2] + "," + objs[i][3];
+            seen.putIfAbsent(key, i);
+        }
+
+        List<Integer> uniqueIndices = new ArrayList<>(seen.values());
+        int m = uniqueIndices.size();
+
+        // 4. Ordenar por obj[0] ascendente (minimizar costo)
+        uniqueIndices.sort((a, b) -> Double.compare(objs[a][0], objs[b][0]));
+
+        boolean[] isDominated = new boolean[n];
+
+        // 5. Análisis de dominancia sin break para garantizar todas las comparaciones
+        for (int ii = 0; ii < m; ii++) {
+            int i = uniqueIndices.get(ii);
+            if (isDominated[i]) continue;
+
+            for (int jj = ii + 1; jj < m; jj++) {
+                int j = uniqueIndices.get(jj);
+                if (isDominated[j]) continue;
+
+                if (objs[j][0] > objs[i][0]) {
+                    // j tiene mayor costo → solo i puede dominar a j
+                    if (dominates(objs[i], objs[j])) {
+                        isDominated[j] = true;
+                    }
+                } else {
+                    // objs[i][0] == objs[j][0] → comparación bidireccional
+                    if (dominates(objs[i], objs[j])) {
+                        isDominated[j] = true;
+                    } else if (dominates(objs[j], objs[i])) {
+                        isDominated[i] = true;
+                        // Sin break: i ya no puede dominar a nadie más
+                        // pero otros j posteriores podrían ser dominados por i's futuros
+                    }
+                }
+            }
+        }
+
+        // 6. Recoger no dominados
+        List<State> nonDominated = new ArrayList<>();
+        for (int i : uniqueIndices) {
+            if (!isDominated[i]) {
+                nonDominated.add(states.get(i));
+            }
+        }
+
+        return nonDominated;
+    }
+
+    /**
+     * A domina a B si:
+     *   - obj[0] minimizar → a[0] <= b[0]
+     *   - obj[1..3] maximizar → a[k] >= b[k]
+     *   - Al menos una condición estrictamente mejor
+     */
+    private boolean dominates(double[] a, double[] b) {
+        return a[0] <= b[0]
+                && a[1] >= b[1]
+                && a[2] >= b[2]
+                && a[3] >= b[3]
+                && (a[0] < b[0] || a[1] > b[1] || a[2] > b[2] || a[3] > b[3]);
+    }
+
+    private void validateParetoFront(List<State> front) {
+        double[][] objs = new double[front.size()][4];
+        for (int i = 0; i < front.size(); i++) {
+            objs[i][0] = front.get(i).getEvaluation().get(0).doubleValue();
+            objs[i][1] = front.get(i).getEvaluation().get(1).doubleValue();
+            objs[i][2] = front.get(i).getEvaluation().get(2).doubleValue();
+            objs[i][3] = front.get(i).getEvaluation().get(3).doubleValue();
+        }
+
+        boolean valid = true;
+        for (int i = 0; i < front.size(); i++) {
+            for (int j = 0; j < front.size(); j++) {
+                if (i == j) continue;
+                if (dominates(objs[j], objs[i])) {
+                    System.out.println("ERROR: Solución " + i + " es dominada por " + j);
+                    System.out.println("  Dominada: [" + objs[i][0] + ", " + objs[i][1] + ", " + objs[i][2] + ", " + objs[i][3] + "]");
+                    System.out.println("  Dominador:[" + objs[j][0] + ", " + objs[j][1] + ", " + objs[j][2] + ", " + objs[j][3] + "]");
+                    valid = false;
+                }
+            }
+        }
+        if (valid) System.out.println("Frente de Pareto VÁLIDO, ninguna solución dominada.");
+    }
+
     public void LocalSearch() throws IllegalArgumentException, SecurityException, ClassNotFoundException,
             InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException
     {
@@ -98,25 +274,27 @@ public class Experimenter {
             System.out.println("********************************");
             System.out.println("LOCAL SEARCH");
             System.out.println("Run number " + i);
+            Strategy.getStrategy().initializeGenerators();
             Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.MultiobjectiveStochasticHillClimbing);
-
             //Extract non dominated on current iteration
-            ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
+            ArrayList<State> pf = new ArrayList<>(extractNonDominatedFast(Strategy.getStrategy().listStates));
             aproximateRealParetoFront.addAll(pf);
-            State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
-            bestFullMembership.add(currentBestFullMembership);
+            //State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
+            //bestFullMembership.add(currentBestFullMembership);
             PrinterTools.iterationResult("LS", params, pf, Strategy.getStrategy(), i, problemInstance);
+            Strategy.destroyExecute();
         }
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
         //Extract non dominated from all previous iterations
-        ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
+        ArrayList<State> realPF = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
+        /*
         State globalBestFullMembership = getFullMbsSolution(bestFullMembership);
         if(!checkIfExists(globalBestFullMembership,realPF))
             realPF.add(globalBestFullMembership);
+        */
         PrinterTools.saveStates(realPF,"LS_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("LocalSearch",params,problemInstance.getOptimal(),realPF, problemInstance);
-        Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
         bestFullMembership.clear();
     }
@@ -136,7 +314,7 @@ public class Experimenter {
             TabuSolutions.maxelements = 100;
             Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.MultiobjectiveTabuSearch);
 
-            ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
+            ArrayList<State> pf = new ArrayList<>(extractNonDominatedFast(Strategy.getStrategy().listStates));
             aproximateRealParetoFront.addAll(pf);
             PrinterTools.iterationResult("MOTS", params, pf, Strategy.getStrategy(), i, problemInstance);
             //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
@@ -144,7 +322,7 @@ public class Experimenter {
         }
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
-        ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
+        ArrayList<State> realPF = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
         PrinterTools.saveStates(realPF,"MOTS_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("TabuSearch",params,problemInstance.getOptimal(),realPF, problemInstance);
         Strategy.destroyExecute();
@@ -166,20 +344,25 @@ public class Experimenter {
             UMOSA.alpha = 0.9;
             UMOSA.tfinal = 0.0;
             UMOSA.tinitial = 500.0;
+            Strategy.getStrategy().initializeGenerators();
             Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.UMOSA);
-            ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
+            ArrayList<State> pf = new ArrayList<>(extractNonDominatedFast(Strategy.getStrategy().listStates));
             aproximateRealParetoFront.addAll(pf);
+            State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
+            bestFullMembership.add(currentBestFullMembership);
             PrinterTools.iterationResult("UMOSA", params, pf, Strategy.getStrategy(), i, problemInstance);
-            //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
-            //PrinterTools.saveStates(pf,"UMOSA_PF_"+i+"_"+problemInstance.getName(), problemInstance);
+            Strategy.destroyExecute();
         }
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime(params.getAverageTime() / execNumber);
-        ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
+        ArrayList<State> realPF = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
+        State globalBestFullMembership = getFullMbsSolution(bestFullMembership);
+        if(!checkIfExists(globalBestFullMembership,realPF))
+            realPF.add(globalBestFullMembership);
         PrinterTools.saveStates(realPF,"UMOSA_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("UMOSA",params,problemInstance.getOptimal(),realPF, problemInstance);
-        Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
+        bestFullMembership.clear();
     }
 
     public void NSGAII_Alg() throws IllegalArgumentException, SecurityException, ClassNotFoundException,
@@ -199,58 +382,31 @@ public class Experimenter {
             NSGAII.crossoverType = CrossoverType.GenericCrossover;
             NSGAII.mutationType = MutationType.GenericMutation;
             NSGAII.PM = 0.8;
-            NSGAII.PC = 0.5;
-            Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.RandomSearch);
-            ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
+            NSGAII.PC = 0.7;
+            Strategy.getStrategy().initializeGenerators();
+            Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.NSGAII);
+            ArrayList<State> pf = new ArrayList<>(extractNonDominatedFast(Strategy.getStrategy().listStates));
             aproximateRealParetoFront.addAll(pf);
+            State currentBestFullMembership = getFullMbsSolution(Strategy.getStrategy().listStates);
+            bestFullMembership.add(currentBestFullMembership);
             PrinterTools.iterationResult("NSGAII", params, pf, Strategy.getStrategy(), i, problemInstance);
-            //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
-            //PrinterTools.saveStates(pf,"NSGAII_PF_"+i+"_"+problemInstance.getName(), problemInstance);
+            Strategy.destroyExecute();
         }
         double timeFinal = (double)System.currentTimeMillis() - timeInit;
         params.setAverage(params.getAverage() / execNumber);
         params.setAverageTime((float) (timeFinal / execNumber));
-        ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
+        ArrayList<State> realPF = new ArrayList<>(extractNonDominatedFast(aproximateRealParetoFront));
+        State globalBestFullMembership = getFullMbsSolution(bestFullMembership);
+        if(!checkIfExists(globalBestFullMembership,realPF))
+            realPF.add(globalBestFullMembership);
         PrinterTools.saveStates(realPF,"NSGAII_PF_Final_"+problemInstance.getName(), problemInstance, params);
         PrinterTools.printSymmary("NSGAII",params,problemInstance.getOptimal(),realPF, problemInstance);
-        Strategy.destroyExecute();
+        //Strategy.destroyExecute();
         aproximateRealParetoFront.clear();
-    }
+        bestFullMembership.clear();
 
-    public void MOGA_Alg() throws IllegalArgumentException, SecurityException, ClassNotFoundException,
-            InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException
-    {
-        AlgParams params = new AlgParams(999999999);
-        params.setName(problemInstance.getName());
-        double timeInit = (double)System.currentTimeMillis();
-        for (int i = 0; i < execNumber; i++)
-        {
-            configElementsOfStrategy(this.problem);
-            System.out.println("********************************");
-            System.out.println("Genetic Algorithm");
-            System.out.println("Run number " + i);
-            MOGA.countRef = 100;
-            MOGA.selectionType = SelectionType.TournamentSelection;
-            MOGA.crossoverType = CrossoverType.GenericCrossover;
-            MOGA.mutationType = MutationType.GenericMutation;
-            MOGA.replaceType = ReplaceType.GenerationalReplace;
-            MOGA.PM = 0.8;
-            MOGA.PC = 0.5;
-            Strategy.getStrategy().executeStrategy(countMaxIterations, 1, GeneratorType.RandomSearch);
-            ArrayList<State> pf = new ArrayList<>(extractNonDominated(Strategy.getStrategy().listStates,problemInstance));
-            aproximateRealParetoFront.addAll(pf);
-            PrinterTools.iterationResult("MOGA", params, pf, Strategy.getStrategy(), i, problemInstance);
-            //PrinterTools.saveStates(Strategy.getStrategy().listStates,"LS_"+i+"_", problemInstance);
-            //PrinterTools.saveStates(pf,"MOGA_PF_"+i+"_"+problemInstance.getName(), problemInstance);
-        }
-        double timeFinal = (double)System.currentTimeMillis() - timeInit;
-        params.setAverage(params.getAverage() / execNumber);
-        params.setAverageTime((float) (timeFinal / execNumber));
-        ArrayList<State> realPF = new ArrayList<>(extractNonDominated(aproximateRealParetoFront,problemInstance));
-        PrinterTools.saveStates(realPF,"MOGA_PF_Final_"+problemInstance.getName(), problemInstance, params);
-        PrinterTools.printSymmary("MOGA",params,problemInstance.getOptimal(),realPF, problemInstance);
-        Strategy.destroyExecute();
-        aproximateRealParetoFront.clear();
+        Runtime runtime = Runtime.getRuntime();
+        runtime.gc();
     }
 
     /**
@@ -260,12 +416,12 @@ public class Experimenter {
     private State getFullMbsSolution(List<State> states){
         State result = new State();
         for (State candidate : states) {
-            if(result.getCode().isEmpty()){
+            if(result.getCode().isEmpty() && !candidate.getEvaluation().isEmpty()){
                 if(candidate.getEvaluation().get(1).floatValue() == 1 && candidate.getEvaluation().get(2).floatValue() == 1){
                     result = candidate;
                 }
             }else{
-                if(candidate.getEvaluation().get(1).floatValue() == 1 && candidate.getEvaluation().get(2).floatValue() == 1){
+                if(!candidate.getEvaluation().isEmpty() && candidate.getEvaluation().get(1).floatValue() == 1 && candidate.getEvaluation().get(2).floatValue() == 1){
                     if(result.getEvaluation().get(0).floatValue() > candidate.getEvaluation().get(0).floatValue() &&
                             result.getEvaluation().get(3).floatValue() < candidate.getEvaluation().get(3).floatValue()){
                         result = candidate;
@@ -274,83 +430,6 @@ public class Experimenter {
             }
         }
         return result;
-    }
-
-    private List<State> extractNonDominated(List<State> states, ProblemInstance pi) {
-        if (states == null || states.isEmpty()) return new ArrayList<>();
-
-        // Configuración: Obj0 min (false), Obj1-3 max (true)
-        boolean[] isMaximize = {false, true, true, true};
-        List<State> paretoFront = new ArrayList<>();
-
-        for (State candidate : states) {
-            if (isInvalid(candidate)) continue;
-
-            boolean skipCandidate = false;
-            List<State> toRemove = new ArrayList<>();
-
-            for (State existing : paretoFront) {
-                int res = compareDominance(existing, candidate, isMaximize);
-
-                if (res == 1) {
-                    // El existente domina al candidato -> Descartar candidato
-                    skipCandidate = true;
-                    break;
-                } else if (res == 0) {
-                    // ¡AQUÍ SE EVITAN DUPLICADOS!
-                    // Son iguales hasta el 4º decimal -> Descartar candidato
-                    skipCandidate = true;
-                    break;
-                } else if (res == -1) {
-                    // El candidato domina al existente -> Marcar para borrar existente
-                    toRemove.add(existing);
-                }
-            }
-
-            if (!skipCandidate) {
-                paretoFront.removeAll(toRemove);
-                paretoFront.add(candidate);
-            }
-        }
-        return paretoFront;
-    }
-
-    /**
-     * Compara dos estados usando redondeo para evitar errores de Double.
-     * Retorna:
-     * 1 si s1 domina a s2
-     * -1 si s2 domina a s1
-     * 0 si son iguales
-     * 2 si son incomparables (ninguno domina al otro)
-     */
-    private int compareDominance(State s1, State s2, boolean[] isMaximize) {
-        List<Double> e1 = s1.getEvaluation();
-        List<Double> e2 = s2.getEvaluation();
-
-        boolean s1Better = false;
-        boolean s2Better = false;
-
-        // Factor de escala para 4 decimales
-        double scale = 10.0;
-
-        for (int i = 0; i < e1.size(); i++) {
-            // Escalamos y redondeamos para mantener 4 decimales de precisión
-            long v1 = Math.round(e1.get(i) * scale);
-            long v2 = Math.round(e2.get(i) * scale);
-
-            if (isMaximize[i]) {
-                if (v1 > v2) s1Better = true;
-                else if (v2 > v1) s2Better = true;
-            } else { // Minimizar
-                if (v1 < v2) s1Better = true;
-                else if (v2 < v1) s2Better = true;
-            }
-        }
-
-        if (s1Better && !s2Better) return 1;  // s1 domina
-        if (s2Better && !s1Better) return -1; // s2 domina
-        if (!s1Better && !s2Better) return 0; // Iguales (hasta el 4º decimal)
-        return 2; // Incomparables
     }
 
     private boolean isInvalid(State s) {

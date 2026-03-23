@@ -18,7 +18,10 @@ public class FO_Priority extends ObjetiveFunction {
         if (!Strategy.getStrategy().getProblem().getCodification().validState(state))
             return -1.0;
         else {
-            return Heuristics.getPackingPriority(state,problemInstance);
+            double result = Heuristics.getPackingPriority(state,problemInstance);
+            //Normalizar entre cero y uno el resultado de la FO
+            result = 1 - (result / problemInstance.getMaxPriority());
+            return result;
         }
     }
 }

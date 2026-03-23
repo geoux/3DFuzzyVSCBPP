@@ -91,4 +91,10 @@ public class ProblemInstance {
         costs.forEach(x -> total[0] += x);
         return total[0];
     }
+
+    public int getMaxPriority(){
+        int[] total = {0};
+        itemsPriorities.forEach(x -> total[0] += x);
+        return total[0];
+    }
 }
