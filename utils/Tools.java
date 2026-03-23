@@ -72,6 +72,16 @@ public class Tools {
         return result;
     }
 
+    public static float reConvertPriorities(State state, ProblemInstance problemInstance){
+        float result = 0;
+        for(int i = 0; i < state.getCode().size(); i++){
+            if((int)state.getCode().get(i) != -1){
+                result += problemInstance.getItemsPriorities().get(i);
+            }
+        }
+        return result;
+    }
+
     /**************************************************************************************************************
     * En Teoría de la Información se denomina distancia de Hamming a la efectividad de los códigos de bloque y
     * depende de la diferencia entre una palabra de código válida y otra. Cuanto mayor sea esta diferencia,

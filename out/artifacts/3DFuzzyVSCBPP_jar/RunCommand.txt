@@ -1,1 +1,1 @@
-java -Djava.util.Arrays.useLegacyMergeSort=true -jar 3DFuzzyVSCBPP.jar
+java -Djava.util.Arrays.useLegacyMergeSort=true -Xms1024m -Xmx12000m -jar MOGA.jar

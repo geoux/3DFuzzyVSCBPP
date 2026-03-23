@@ -28,6 +28,48 @@ public class CustomOperator extends Operator {
     * Solo LS y SA
     *
     *************************************************/
+    /*
+    @Override
+    public List<State> generatedNewState(State state, Integer integer) {
+        boolean ok = false;
+        int key;
+        int value = 0;
+        while(!ok){
+            key = Strategy.getStrategy().getProblem().getCodification().getAleatoryKey();
+            value = (int) state.getCode().get(key);
+            if(value != -1)
+                ok = true;
+        }
+        double min = 0;
+        if(state.getEvaluation().isEmpty()){
+            ArrayList<Double> membership = new ArrayList<>(Heuristics.getCapacityMembership(state,problemInstance));
+            min = membership.stream().min(Comparator.comparing(Double::doubleValue)).get();
+        }else{
+            min = state.getEvaluation().get(1);
+        }
+        double probabilityOperator = 1 - (double) (Strategy.getStrategy().getCountMax() - Strategy.getStrategy().getCountCurrent()) /Strategy.getStrategy().getCountMax();
+        double roulette = Math.random();
+        if(min < 1){
+            if(roulette < probabilityOperator)
+                Heuristics.mutationOperator(state,problemInstance,value);
+            else {
+                if(Math.random() > 0.5)
+                    Heuristics.capacityMembershipOperator(state, problemInstance);
+                else
+                    Heuristics.packingMembershipOperator(state, problemInstance);
+            }
+        }else{
+            if(Math.random() > 0.5)
+                Heuristics.mutationOperator(state,problemInstance,value);
+            else
+                Heuristics.packingMembershipOperator(state, problemInstance);
+        }
+
+        List<State> listNeigborhood = new ArrayList<>();
+        listNeigborhood.add(state);
+        return listNeigborhood;
+    }
+*/
     @Override
     public List<State> generatedNewState(State state, Integer integer) {
         // 1. Selección de un item aleatorio que esté empaquetado (value != -1)
@@ -86,48 +128,6 @@ public class CustomOperator extends Operator {
         // Retornamos la vecindad (en este caso un solo estado)
         return Collections.singletonList(state);
     }
-    /*
-
-    public List<State> generatedNewState(State state, Integer integer) {
-        boolean ok = false;
-        int key;
-        int value = 0;
-        while(!ok){
-            key = Strategy.getStrategy().getProblem().getCodification().getAleatoryKey();
-            value = (int) state.getCode().get(key);
-            if(value != -1)
-                ok = true;
-        }
-        double min = 0;
-        if(state.getEvaluation().isEmpty()){
-            ArrayList<Double> membership = new ArrayList<>(Heuristics.getCapacityMembership(state,problemInstance));
-            min = membership.stream().min(Comparator.comparing(Double::doubleValue)).get();
-        }else{
-            min = state.getEvaluation().get(1);
-        }
-        double probabilityOperator = 1 - (double) (Strategy.getStrategy().getCountMax() - Strategy.getStrategy().getCountCurrent()) /Strategy.getStrategy().getCountMax();
-        double roulette = Math.random();
-        if(min < 1){
-            if(roulette < probabilityOperator)
-                Heuristics.mutationOperator(state,problemInstance,value);
-            else {
-                if(Math.random() > 0.5)
-                    Heuristics.capacityMembershipOperator(state, problemInstance);
-                else
-                    Heuristics.packingMembershipOperator(state, problemInstance);
-            }
-        }else{
-            if(Math.random() > 0.5)
-                Heuristics.mutationOperator(state,problemInstance,value);
-            else
-                Heuristics.packingMembershipOperator(state, problemInstance);
-        }
-
-        List<State> listNeigborhood = new ArrayList<>();
-        listNeigborhood.add(state);
-        return listNeigborhood;
-    }
-*/
     /*****************************************
     * SE IGNORA EL PARAMETRO SEGUN CYNTHIA
     * Este se ejecuta en todos los algoritmos
